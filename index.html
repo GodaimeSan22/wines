@@ -444,6 +444,140 @@
     }
 
 
+
+    .sort-wrap {
+      display: grid;
+      gap: 16px;
+    }
+
+    .sort-game {
+      background: var(--card);
+      border-radius: 30px;
+      padding: 18px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .sort-top {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: center;
+      margin-bottom: 14px;
+    }
+
+    .sort-card {
+      background: linear-gradient(135deg, #111827, #7f1d1d);
+      color: white;
+      border-radius: 26px;
+      padding: 20px;
+      box-shadow: 0 12px 28px rgba(17,24,39,.18);
+      cursor: grab;
+      user-select: none;
+      touch-action: none;
+      min-height: 132px;
+      display: grid;
+      align-content: center;
+      gap: 8px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .sort-card::after {
+      content: "🍷";
+      position: absolute;
+      right: 16px;
+      bottom: 10px;
+      font-size: 48px;
+      opacity: .25;
+    }
+
+    .sort-card:active {
+      cursor: grabbing;
+      transform: scale(.98);
+    }
+
+    .sort-card h3 {
+      margin: 0;
+      font-size: 24px;
+      line-height: 1.05;
+      letter-spacing: -.04em;
+      max-width: 80%;
+    }
+
+    .sort-card p {
+      margin: 0;
+      color: rgba(255,255,255,.78);
+      font-weight: 800;
+    }
+
+    .drop-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+    }
+
+    .drop-zone {
+      min-height: 106px;
+      border: 2px dashed #d6d3d1;
+      border-radius: 24px;
+      background: rgba(255,255,255,.68);
+      display: grid;
+      place-items: center;
+      text-align: center;
+      padding: 12px;
+      font-weight: 900;
+      transition: .18s ease;
+    }
+
+    .drop-zone strong {
+      display: block;
+      font-size: 28px;
+      margin-bottom: 4px;
+    }
+
+    .drop-zone.over {
+      border-color: #111827;
+      background: #fff7ed;
+      transform: scale(1.03);
+    }
+
+    .drop-zone.correct {
+      background: #dcfce7;
+      border-color: #22c55e;
+    }
+
+    .drop-zone.wrong {
+      background: #fee2e2;
+      border-color: #ef4444;
+    }
+
+    .type-white { background: linear-gradient(135deg, #fef9c3, #ffffff); }
+    .type-red { background: linear-gradient(135deg, #7f1d1d, #111827); color: white; }
+    .type-rose { background: linear-gradient(135deg, #fbcfe8, #fff1f2); }
+    .type-sparkling { background: linear-gradient(135deg, #fef3c7, #ecfeff); }
+    .type-non { background: linear-gradient(135deg, #dcfce7, #ffffff); }
+
+    .sort-result {
+      min-height: 26px;
+      margin-top: 10px;
+      font-weight: 900;
+    }
+
+    @media (max-width: 640px) {
+      .drop-grid {
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .sort-card {
+        min-height: 118px;
+      }
+
+      .sort-card h3 {
+        font-size: 22px;
+      }
+    }
+
     .progress-grid {
       display: grid;
       grid-template-columns: repeat(5, 1fr);
@@ -996,6 +1130,144 @@
       `).join("");
     }
 
+
+    let currentCountrySort = null;
+    let currentTypeSort = null;
+
+    function wineTypeLabel(wine) {
+      if (wine.color === "red") return "Red";
+      if (wine.color === "rose") return "Rosé";
+      if (wine.color === "sparkling") return "Sparkling";
+      if (wine.color === "non") return "Non-alcoholic";
+      return "White";
+    }
+
+    function renderSortCard(elId, wine) {
+      const el = document.getElementById(elId);
+      el.innerHTML = `
+        <p>${wine.flag} ${wine.country} • ${wine.grape}</p>
+        <h3>${wine.name}</h3>
+        <p>${wine.style}</p>
+      `;
+      el.dataset.country = wine.country;
+      el.dataset.type = wineTypeLabel(wine);
+    }
+
+    function setupDrag(cardId) {
+      const card = document.getElementById(cardId);
+
+      card.addEventListener("dragstart", e => {
+        e.dataTransfer.setData("text/plain", cardId);
+      });
+
+      let touchTarget = null;
+
+      card.addEventListener("touchmove", e => {
+        const touch = e.touches[0];
+        const target = document.elementFromPoint(touch.clientX, touch.clientY);
+        document.querySelectorAll(".drop-zone").forEach(z => z.classList.remove("over"));
+        if (target && target.closest(".drop-zone")) {
+          touchTarget = target.closest(".drop-zone");
+          touchTarget.classList.add("over");
+        }
+      }, { passive: true });
+
+      card.addEventListener("touchend", () => {
+        if (touchTarget) {
+          handleDrop(cardId, touchTarget);
+          touchTarget.classList.remove("over");
+          touchTarget = null;
+        }
+      });
+    }
+
+    function makeDropZones(containerId, values, cardId) {
+      const container = document.getElementById(containerId);
+      container.innerHTML = values.map(v => `
+        <div class="drop-zone ${v.className || ""}" data-answer="${v.answer}">
+          <div><strong>${v.icon}</strong>${v.label}</div>
+        </div>
+      `).join("");
+
+      container.querySelectorAll(".drop-zone").forEach(zone => {
+        zone.addEventListener("dragover", e => {
+          e.preventDefault();
+          zone.classList.add("over");
+        });
+
+        zone.addEventListener("dragleave", () => zone.classList.remove("over"));
+
+        zone.addEventListener("drop", e => {
+          e.preventDefault();
+          zone.classList.remove("over");
+          handleDrop(cardId, zone);
+        });
+      });
+    }
+
+    function handleDrop(cardId, zone) {
+      const card = document.getElementById(cardId);
+      const expected = cardId === "countrySortCard" ? card.dataset.country : card.dataset.type;
+      const resultId = cardId === "countrySortCard" ? "countrySortResult" : "typeSortResult";
+      const isCorrect = zone.dataset.answer === expected;
+
+      zone.classList.add(isCorrect ? "correct" : "wrong");
+      document.getElementById(resultId).textContent = isCorrect
+        ? "✅ Correct! Nice sorting."
+        : `❌ Not quite. Correct answer: ${expected}`;
+
+      recordAnswer(isCorrect);
+
+      setTimeout(() => {
+        zone.classList.remove("correct", "wrong");
+        if (cardId === "countrySortCard") newCountrySort();
+        else newTypeSort();
+      }, 1100);
+    }
+
+    function newCountrySort() {
+      currentCountrySort = wines[Math.floor(Math.random() * wines.length)];
+      renderSortCard("countrySortCard", currentCountrySort);
+
+      const countryIcons = {
+        Spain: "🇪🇸",
+        Italy: "🇮🇹",
+        Australia: "🇦🇺",
+        "New Zealand": "🇳🇿",
+        France: "🇫🇷",
+        Argentina: "🇦🇷"
+      };
+
+      const allCountries = [...new Set(wines.map(w => w.country))];
+      const options = shuffle(allCountries).slice(0, 5);
+      if (!options.includes(currentCountrySort.country)) options[0] = currentCountrySort.country;
+
+      makeDropZones("countryDropGrid", shuffle(options).map(country => ({
+        icon: countryIcons[country] || "🏳️",
+        label: country,
+        answer: country
+      })), "countrySortCard");
+
+      document.getElementById("countrySortResult").textContent = "";
+    }
+
+    function newTypeSort() {
+      currentTypeSort = wines[Math.floor(Math.random() * wines.length)];
+      renderSortCard("typeSortCard", currentTypeSort);
+
+      const types = [
+        { icon: "🥂", label: "White", answer: "White", className: "type-white" },
+        { icon: "🍷", label: "Red", answer: "Red", className: "type-red" },
+        { icon: "🌸", label: "Rosé", answer: "Rosé", className: "type-rose" },
+        { icon: "✨", label: "Sparkling", answer: "Sparkling", className: "type-sparkling" },
+        { icon: "🌿", label: "Non-alcoholic", answer: "Non-alcoholic", className: "type-non" }
+      ];
+
+      makeDropZones("typeDropGrid", types, "typeSortCard");
+      document.getElementById("typeSortResult").textContent = "";
+    }
+
+
     setupFilters();
     renderWines();
     newQuiz();
@@ -1004,6 +1276,10 @@
     setupMemory();
     renderVideos();
     renderProgress();
+    setupDrag("countrySortCard");
+    setupDrag("typeSortCard");
+    newCountrySort();
+    newTypeSort();
   </script>
 </body>
 </html>
